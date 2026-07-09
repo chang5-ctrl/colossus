@@ -1,0 +1,48 @@
+# Colossus Base Image
+# Multi-stage build for minimal production image
+
+# =============================================================================
+# BUILD STAGE
+# =============================================================================
+FROM debian:bookworm-slim AS builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    git \
+    build-essential \
+    pkg-config \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install language toolchains
+# Rust
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Go
+ENV GO_VERSION=1.22.0
+RUN curl -L https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz | tar -C /usr/local -xzf -
+ENV PATH="/usr/local/go/bin:${PATH}"
+
+# =============================================================================
+# PRODUCTION STAGE
+# =============================================================================
+FROM gcr.io/distroless/cc-debian12:latest
+
+# Non-root user
+USER 65532:65532
+
+# Set working directory
+WORKDIR /app
+
+# Copy binary from build stage (override in service-specific Dockerfiles)
+# COPY --from=builder --chown=65532:65532 /build/target/release/service /app/service
+
+# Health check
+# HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+#   CMD ["/app/service", "health"]
+
+# Default entrypoint
+ENTRYPOINT ["/app/service"]

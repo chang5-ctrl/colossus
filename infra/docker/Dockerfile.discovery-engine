@@ -1,0 +1,26 @@
+# Discovery Engine Service
+FROM colossus/base:latest AS builder
+
+WORKDIR /build
+COPY services/discovery-engine/ .
+COPY libs/ ../libs/
+
+# Build Rust binary
+RUN cargo build --release --bin discovery-engine
+
+# =============================================================================
+# PRODUCTION
+# =============================================================================
+FROM gcr.io/distroless/cc-debian12:latest
+
+USER 65532:65532
+WORKDIR /app
+
+COPY --from=builder --chown=65532:65532 /build/target/release/discovery-engine /app/service
+
+EXPOSE 8080 9090
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD ["/app/service", "health"]
+
+ENTRYPOINT ["/app/service"]

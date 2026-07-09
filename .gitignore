@@ -1,0 +1,98 @@
+# Generated Artifacts
+artifacts/
+*.generated.*
+
+# Build outputs
+build/
+dist/
+target/
+*.egg-info/
+node_modules/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Test coverage
+coverage/
+*.lcov
+.nyc_output/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# Kubernetes secrets
+*secret*.yaml
+*secret*.yml
+!*secret*-example.yaml
+
+# Compiled binaries
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+
+# Go
+vendor/
+
+# Rust
+target/
+Cargo.lock
+
+# Java
+*.class
+*.jar
+*.war
+*.ear
+
+# Dependencies (managed by package managers)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+composer.lock
+Gemfile.lock
+poetry.lock
+
+# Documentation builds
+docs/_build/
+site/
+
+# Local development overrides
+docker-compose.override.yml
+docker-compose.override.yaml
