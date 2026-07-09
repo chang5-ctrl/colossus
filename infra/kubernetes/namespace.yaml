@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: colossus
+  labels:
+    name: colossus
+    environment: production
+    app.kubernetes.io/part-of: colossus
+    app.kubernetes.io/managed-by: argocd

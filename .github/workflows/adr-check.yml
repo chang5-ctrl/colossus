@@ -1,0 +1,65 @@
+name: ADR Check
+
+on:
+  pull_request:
+    paths:
+      - 'docs/adr/**'
+      - 'docs/architecture/**'
+      - 'services/**'
+      - 'libs/**'
+      - 'infra/**'
+
+jobs:
+  adr-check:
+    name: Architecture Decision Record Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check ADR for Architecture Changes
+        run: |
+          # Check if any architecture-related files changed
+          ARCH_CHANGED=$(git diff --name-only origin/main | grep -E '^(docs/architecture|services/|libs/|infra/)' | wc -l)
+          ADR_CHANGED=$(git diff --name-only origin/main | grep '^docs/adr/' | wc -l)
+
+          if [ "$ARCH_CHANGED" -gt 0 ] && [ "$ADR_CHANGED" -eq 0 ]; then
+            echo "ERROR: Architecture changes detected but no ADR was added or modified."
+            echo "Changed architecture files:"
+            git diff --name-only origin/main | grep -E '^(docs/architecture|services/|libs/|infra/)'
+            echo ""
+            echo "Please create or update an ADR for any architectural changes."
+            echo "See docs/adr/ for examples."
+            exit 1
+          fi
+
+          echo "ADR check passed."
+
+      - name: Validate ADR Format
+        run: |
+          for adr in docs/adr/ADR-*.md; do
+            if [ -f "$adr" ]; then
+              # Check required sections
+              for section in "Context" "Decision" "Consequences" "Alternatives Considered"; do
+                if ! grep -q "^## $section" "$adr"; then
+                  echo "ERROR: $adr is missing required section: $section"
+                  exit 1
+                fi
+              done
+              echo "ADR format valid: $adr"
+            fi
+          done
+
+      - name: Check ADR Numbering
+        run: |
+          # Check for gaps in ADR numbering
+          NUMBERS=$(ls docs/adr/ADR-*.md 2>/dev/null | sed 's/.*ADR-//' | sed 's/-.*//' | sort -n)
+          EXPECTED=1
+          for num in $NUMBERS; do
+            if [ "$num" -ne "$EXPECTED" ]; then
+              echo "WARNING: ADR numbering gap detected. Expected ADR-$EXPECTED, found ADR-$num"
+            fi
+            EXPECTED=$((EXPECTED + 1))
+          done

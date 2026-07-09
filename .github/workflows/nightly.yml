@@ -1,0 +1,137 @@
+name: Nightly
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  # =============================================================================
+  # FULL TEST SUITE
+  # =============================================================================
+  full-test:
+    name: Full Test Suite
+    runs-on: ubuntu-latest-16-cores
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bazel
+        uses: bazelbuild/setup-bazelisk@v2
+
+      - name: Run All Tests
+        run: |
+          bazel test //... --test_output=errors --jobs=16
+
+      - name: Upload Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: nightly-test-results
+          path: bazel-testlogs/
+
+  # =============================================================================
+  # DEPENDENCY UPDATE CHECK
+  # =============================================================================
+  dependency-check:
+    name: Dependency Update Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check Rust Dependencies
+        run: |
+          cargo install cargo-outdated
+          cargo outdated --exit-code 1 || true
+
+      - name: Check Go Dependencies
+        run: |
+          go list -u -m all | grep -E '^\S+\s+v[0-9]+\.[0-9]+\.[0-9]+\s+\[v[0-9]+\.[0-9]+\.[0-9]+\]$' || true
+
+      - name: Check Python Dependencies
+        run: |
+          pip install pip-outdated
+          pip-outdated || true
+
+  # =============================================================================
+  # SECURITY AUDIT
+  # =============================================================================
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Rust Audit
+        run: |
+          cargo install cargo-audit
+          cargo audit
+
+      - name: Go Audit
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+      - name: Python Audit
+        run: |
+          pip install safety
+          safety check
+
+      - name: Container Audit
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+
+  # =============================================================================
+  # BACKUP VERIFICATION
+  # =============================================================================
+  backup-verify:
+    name: Backup Verification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify Backup Scripts
+        run: |
+          for script in infra/scripts/backup-*.sh; do
+            if [ -f "$script" ]; then
+              bash -n "$script"
+              echo "Syntax OK: $script"
+            fi
+          done
+
+      - name: Verify Restore Scripts
+        run: |
+          for script in infra/scripts/restore-*.sh; do
+            if [ -f "$script" ]; then
+              bash -n "$script"
+              echo "Syntax OK: $script"
+            fi
+          done
+
+  # =============================================================================
+  # DISASTER RECOVERY DRILL
+  # =============================================================================
+  dr-drill:
+    name: Disaster Recovery Drill
+    runs-on: ubuntu-latest
+    if: github.event.schedule == '0 2 * * 0'  # Only on Sundays
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run DR Drill
+        run: |
+          echo "Running simulated disaster recovery drill..."
+          # This would connect to staging and simulate failures
+          # For now, we verify the DR runbooks exist and are valid
+          for runbook in docs/operations/dr-*.md; do
+            if [ -f "$runbook" ]; then
+              echo "DR runbook found: $runbook"
+            fi
+          done

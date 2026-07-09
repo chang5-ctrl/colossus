@@ -1,0 +1,156 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sdk-generator
+  namespace: colossus
+  labels:
+    app: sdk-generator
+    app.kubernetes.io/part-of: colossus
+    app.kubernetes.io/component: data-plane
+spec:
+  replicas: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 2
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: sdk-generator
+  template:
+    metadata:
+      labels:
+        app: sdk-generator
+        app.kubernetes.io/part-of: colossus
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: colossus-service-account
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        fsGroup: 65532
+      containers:
+        - name: sdk-generator
+          image: ghcr.io/chang5-ctrl/colossus/sdk-generator:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: grpc
+              containerPort: 50051
+            - name: metrics
+              containerPort: 9090
+          envFrom:
+            - configMapRef:
+                name: colossus-config
+          env:
+            - name: COCKROACHDB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: colossus-secrets
+                  key: COCKROACHDB_PASSWORD
+            - name: KAFKA_SASL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: colossus-secrets
+                  key: KAFKA_SASL_PASSWORD
+          resources:
+            requests:
+              memory: "2Gi"
+              cpu: "2000m"
+            limits:
+              memory: "8Gi"
+              cpu: "8000m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: templates
+              mountPath: /app/templates
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: templates
+          configMap:
+            name: colossus-templates
+      nodeSelector:
+        workload-type: compute-intensive
+      tolerations:
+        - key: "compute-intensive"
+          operator: "Equal"
+          value: "true"
+          effect: "NoSchedule"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sdk-generator
+  namespace: colossus
+spec:
+  type: ClusterIP
+  selector:
+    app: sdk-generator
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+    - name: grpc
+      port: 50051
+      targetPort: 50051
+    - name: metrics
+      port: 9090
+      targetPort: 9090
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: sdk-generator-hpa
+  namespace: colossus
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: sdk-generator
+  minReplicas: 5
+  maxReplicas: 100
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+    - type: Pods
+      pods:
+        metric:
+          name: kafka_consumer_lag
+        target:
+          type: AverageValue
+          averageValue: "100"
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+        - type: Percent
+          value: 200
+          periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 600
+      policies:
+        - type: Percent
+          value: 10
+          periodSeconds: 120
